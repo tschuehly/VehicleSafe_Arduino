@@ -100,19 +100,18 @@ uint32_t timer = millis();
             //long,lati,speed
 float gps[] = {0,0,0,0};
 
-void lp()
-{
+int gps_moving(){
 
   if (GPS.newNMEAreceived()) {
     if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-      return;  // we can fail to parse a sentence in which case we should just wait for another
+      gps_moving();  // we can fail to parse a sentence in which case we should just wait for another
   }
 
   // if millis() or timer wraps around, we'll just reset it
   if (timer > millis())  timer = millis();
 
   // approximately every 2 seconds or so, print out the current stats
-  if (millis() - timer > 2000) {
+  if (millis() - timer > 1000) {
     timer = millis(); // reset the timer
 
     Serial.print("\nTime: ");
@@ -127,67 +126,6 @@ void lp()
     Serial.print("Fix: "); Serial.print((int)GPS.fix);
     Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
     if (GPS.fix) {
-      Serial.print("Location: ");
-      Serial.print(GPS.latitude, 4); Serial.print(GPS.lat);
-      Serial.print(", ");
-      Serial.print(GPS.longitude, 4); Serial.println(GPS.lon);
-      Serial.print("Location (in degrees, works with Google Maps): ");
-      Serial.print(GPS.latitudeDegrees, 10);
-      Serial.print(", ");
-      Serial.println(GPS.longitudeDegrees, 10);
-
-      Serial.print("Speed (knots): "); Serial.println(GPS.speed);
-      Serial.print("Angle: "); Serial.println(GPS.angle);
-      Serial.print("Altitude: "); Serial.println(GPS.altitude);
-      Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
-
-      // Da die string() funktion die float abschneidet muss man eine andere Funktion verwenden
-      char buff[10];
-      String latitude;
-      String longitude;
-      dtostrf(GPS.latitudeDegrees, 4, 6, buff);
-      latitude = buff;
-      dtostrf(GPS.longitudeDegrees, 4, 6, buff);
-      longitude = buff;
-
-      String csvdata = "100002," +String(GPS.hour)+","+ String(GPS.minute) + ","+String(GPS.seconds) + ","+ String(GPS.day) + ","+String(GPS.month) + ","+String(GPS.year)+","+String(GPS.fix)+ ","+String(GPS.fixquality)+ ","+ latitude +","+ longitude +","+String(GPS.speed)+","+String(GPS.angle)+"," +String(GPS.altitude)+","+ String(GPS.satellites);
-      piS.print(csvdata);
-      Serial.print("csv : ");Serial.println(csvdata);
-    }else{
-      //char csvdata = "100002 , " +GPS.hour + GPS.minute + GPS.seconds + ","+ GPS.day + ","+GPS.month + ","+GPS.year+","+GPS.fix+ ","+GPS.fixquality+ ",0,0,0,0,0,0";
-
-    }
-    }
-}
-
-
-
-int gps_moving(){
-
-  if (GPS.newNMEAreceived()) {
-    if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-      gps_moving();  // we can fail to parse a sentence in which case we should just wait for another
-  }
-
-  // if millis() or timer wraps around, we'll just reset it
-  if (timer > millis())  timer = millis();
-
-  // approximately every 2 seconds or so, print out the current stats
-  if (millis() - timer > 2000) {
-    timer = millis(); // reset the timer
-
-    Serial.print("\nTime: ");
-    Serial.print(GPS.hour, DEC); Serial.print(':');
-    Serial.print(GPS.minute, DEC); Serial.print(':');
-    Serial.print(GPS.seconds, DEC); Serial.print('.');
-    Serial.println(GPS.milliseconds);
-    Serial.print("Date: ");
-    Serial.print(GPS.day, DEC); Serial.print('/');
-    Serial.print(GPS.month, DEC); Serial.print("/20");
-    Serial.println(GPS.year, DEC);
-    Serial.print("Fix: "); Serial.print((int)GPS.fix);
-    Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
-    if (GPS.fix) {;
       Serial.print(GPS.latitudeDegrees,10);
       Serial.print(", ");
       Serial.println(GPS.longitudeDegrees,10);
@@ -210,8 +148,10 @@ int gps_moving(){
         if(variance > maxvariance){
           maxvariance = variance;
         }
+        
         Serial.print("Die Varianz ist: ");Serial.println(variance,10);
-        if(variance > 0.01){
+        
+        if(variance > 0.001){
           Serial.println("Das Fahrzeug wurde bewegt");
         }
       }
@@ -235,6 +175,9 @@ void loop(){
     Serial.print("Average over 5 latitude : ");Serial.println(latmed,10);
   }
     Serial.print("Die maximal Varianz ist :");Serial.println(maxvariance,10);
+    piS.print("# ");piS.print(GPS.hour, DEC); piS.print(':');piS.print(GPS.minute, DEC); piS.print(':');
+    piS.print(GPS.seconds, DEC); piS.print('.'); piS.print(GPS.milliseconds);piS.print(" maxvariance: ");
+    piS.println(maxvariance,10);
   }
 
 
