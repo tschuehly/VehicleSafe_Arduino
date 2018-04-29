@@ -1,6 +1,7 @@
 #include <Adafruit_GPS.h>
 #include <SoftwareSerial.h>
 #include <SoftwareSerial.h>
+#include <TimeLib.h>
 
 // Variablen
 #define pi_tx 8;
@@ -34,6 +35,7 @@ Adafruit_GPS GPS(&mySerial);
 // off by default!
 boolean usingInterrupt = false;
 void useInterrupt(boolean); // Func prototype keeps Arduino 0023 happy
+time_t t;
 
 void setup()
 {
@@ -113,7 +115,7 @@ void check_GPS(int mode)
   if (timer > millis())  timer = millis();
 
   // approximately every 2 seconds or so, print out the current stats
-  if (millis() - timer > 2000) {
+  if (millis() - timer > 4000) {
     timer = millis(); // reset the timer
     if (GPS.fix) {
       // Da die string() funktion die float abschneidet muss man eine andere Funktion verwenden
@@ -156,15 +158,24 @@ void check_GPS(int mode)
             Serial.println("Das Fahrzeug wurde bewegt");
           }
           Serial.print("lonvariance: ");Serial.println(lonvariance,10);
-          Serial.print("latvariance: ");Serial.println(latvariance,10);
+          Serial.print("latvariance: ");Serial.println(latvariance,10); 
         }
       }
 
       times = times +1;
-
-      String csvdata = "100002," +String(GPS.hour)+","+ String(GPS.minute) + ","+String(GPS.seconds) + ","+ String(GPS.day) + ","+String(GPS.month) + ","+String(GPS.year)+","+String(GPS.fix)+ ","+String(GPS.fixquality)+ ","+ latitude +","+ longitude +","+String(GPS.speed)+","+String(GPS.angle)+"," +String(GPS.altitude)+","+ String(GPS.satellites);
-      piS.print(csvdata);
-      Serial.print("csv : ");Serial.println(csvdata);
+      int curhr = GPS.hour;
+      int curmin = GPS.minute;
+      int cursec = GPS.seconds;
+      int curday = GPS.day;
+      int curmonth = GPS.month;
+      int curyear = GPS.year;
+      setTime(curhr,curmin,cursec,curday,curmonth,curyear);
+      t = now();
+      String timenow = String(t);
+      Serial.println(timenow);
+      String serdata = "{'command':'sendbroadcast','acc_id':'1','device_id': '100001', 'timestamp':'" + timenow + "','lock_mode':'1','latitude':'"+ latitude + "','longitude':'" + longitude +"','altitude':'"+String(GPS.altitude)+"','speed':'"+String(GPS.speed)+"','fix':'"+String(GPS.fix)+"','fix_quality':'"+String(GPS.fixquality)+"'}";
+      piS.print(serdata);
+      Serial.print("Data : ");Serial.println(serdata);
       
     }else{
       Serial.println("NoFix");
