@@ -14,15 +14,17 @@ int longitude = 0;
 int latitude = 0;
 float lonmed = 0;
 float latmed = 0;
-float variance = -1;
-float maxvariance = -1;
+float latvariance = -1;
+float latmaxvariance = -1;
+float lonvariance = -1;
+float lonmaxvariance = -1;
 int fix;
 SoftwareSerial piS(7,8);
 // Connect the GPS Power pin to 5V
 // Connect the GPS Ground pin to ground
 //   Connect the GPS TX (transmit) pin to Digital 3
 //   Connect the GPS RX (receive) pin to Digital 2
-SoftwareSerial mySerial(3, 2);
+SoftwareSerial mySerial(10, 9);
 
 
 Adafruit_GPS GPS(&mySerial);
@@ -46,7 +48,8 @@ void setup()
 
   // 9600 NMEA is the default baud rate for Adafruit MTK GPS's- some use 4800
   GPS.begin(9600);
-
+  //GPS.sendCommand("$PMTK251,4800*14"); //this will change GPS baud rate to 4800
+  //GPS.begin(4800);  //now change the port to 4800
   // uncomment this line to turn on RMC (recommended minimum) and GGA (fix data) including altitude
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
 
@@ -140,18 +143,26 @@ int gps_moving(){
         Serial.println(latmed,10);
       }
       if(times>8){
-        variance =  lonmed - GPS.longitudeDegrees;
-        if(variance < 0){
-                  variance = variance * -1;
-                  Serial.println("negative Varianz");
+        lonvariance =  lonmed - GPS.longitudeDegrees;
+        latvariance =  latmed - GPS.latitudeDegrees;
+        if(lonvariance < 0){
+                  lonvariance = lonvariance * -1;
+                  Serial.println("negative lonVarianz");
         } 
-        if(variance > maxvariance){
-          maxvariance = variance;
+        if(latvariance < 0){
+                  latvariance = latvariance * -1;
+                  Serial.println("negative latVarianz");
+        } 
+        if(lonvariance > lonmaxvariance){
+          lonmaxvariance = lonvariance;
+        }
+        if(latvariance > latmaxvariance){
+          latmaxvariance = latvariance;
         }
         
-        Serial.print("Die Varianz ist: ");Serial.println(variance,10);
-        
-        if(variance > 0.001){
+        Serial.print("Die lonVarianz ist: ");Serial.println(lonvariance,10);
+        Serial.print("Die latVarianz ist: ");Serial.println(latvariance,10);
+        if(lonvariance > 0.001 || latvariance > 0.001){
           Serial.println("Das Fahrzeug wurde bewegt");
         }
       }
@@ -174,10 +185,11 @@ void loop(){
     Serial.print("Average over 5 longitude: ");Serial.println(lonmed,10);
     Serial.print("Average over 5 latitude : ");Serial.println(latmed,10);
   }
-    Serial.print("Die maximal Varianz ist :");Serial.println(maxvariance,10);
+    Serial.print("Die maximal lonVarianz ist :");Serial.println(lonmaxvariance,10);
+    Serial.print("Die maximal latVarianz ist :");Serial.println(latmaxvariance,10);
     piS.print("# ");piS.print(GPS.hour, DEC); piS.print(':');piS.print(GPS.minute, DEC); piS.print(':');
     piS.print(GPS.seconds, DEC); piS.print('.'); piS.print(GPS.milliseconds);piS.print(" maxvariance: ");
-    piS.println(maxvariance,10);
+    piS.println(lonmaxvariance,10);
   }
 
 

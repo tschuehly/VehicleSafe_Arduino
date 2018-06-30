@@ -1,16 +1,10 @@
-
-#include <Adafruit_GPS.h>
-#include <SoftwareSerial.h>
+w#include <Adafruit_GPS.h>
 #include <SoftwareSerial.h>
 #include <TimeLib.h>
 #include <LowPower.h>
-// Variablen
-#define pi_tx 8;
-#define pi_rx 7;
-byte number = 0;
+// Globale Variablen
 int times;
 int sectimes;
-int schluessel = 9;
 int fix;
 int longitude = 0;
 int latitude = 0;
@@ -20,17 +14,20 @@ float lonvariance = -1;
 float latvariance = -1;
 float maxvariance = -1;
 int movcount = 0;
-
 const int wakeUpPin = 2;
 int source = 11;
-volatile int value = 0;
 int sleeper = 5;
-int val = 0;
+int sleepval = 0;
 int schalter = 12;
 int schalter_status = 0;
 int gps_an = 13;
 int rasp_an = 6;
 int timer_speed = 2000;
+int batval ;
+int analogPin = A3;
+float prowert ;
+String batper = "";
+bool pyScr = false;
 //Raspberry Serial Connection
 // Connect Pin 8 to GPIO 15
 // Connect Pin 7 to GPIO 14
@@ -53,33 +50,34 @@ void useInterrupt(boolean); // Func prototype keeps Arduino 0023 happy
 time_t t;
 
 void setup()
-{
+{  
   pinMode(wakeUpPin, INPUT); 
   pinMode(schalter,INPUT_PULLUP);  
   pinMode(source,OUTPUT);
   pinMode(rasp_an,OUTPUT);
   pinMode(gps_an,OUTPUT);
-  pinMode(sleeper,INPUT);
+  pinMode(sleeper,INPUT_PULLUP);
   digitalWrite(source,HIGH);
-  digitalWrite(rasp_an,HIGH );
-  
-  Serial.println("Not awake");
+  digitalWrite(gps_an,HIGH);
+  digitalWrite(rasp_an,LOW);
   //connect to Raspberry
-  piS.begin(115200);
+  piS.begin(9600);
   delay(500);
   // connect at 115200 so we can read the GPS fast enough and echo without dropping chars
   Serial.begin(115200);
   Serial.println("VehicleSafe main test");
-
+  delay(500);
   // 9600 NMEA is the default baud rate for Adafruit MTK GPS's- some use 4800
   GPS.begin(9600);
+  //GPS.sendCommand("$PMTK251,4800*14"); //this will change GPS baud rate to 4800
+  //GPS.begin(4800);  //now change the port to 4800
 
   // uncomment this line to turn on RMC (recommended minimum) and GGA (fix data) including altitude
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
 
   // Set the update rate
-  //GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate
-  GPS.sendCommand("$PMTK220,2000*1C");
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate
+  //GPS.sendCommand("$PMTK220,2000*1C");
   // Request updates on antenna status, comment out to keep quiet
   //GPS.sendCommand(PGCMD_ANTENNA);
 
@@ -152,21 +150,21 @@ void check_GPS(int mode)
       longitude = buff;
       
       if(mode == 1){                                                                             // Der Modus 1 schickt die Daten direkt an den Raspberry
-        if(times>2 && times <8){                                                                 // Die ersten  5 Gps Standorte werden zusammengezählt
+        if(times>5 && times <11){    // Die ersten  5 Gps Standorte werden zusammengezählt
           lonmed = lonmed + GPS.longitudeDegrees;
           Serial.println(lonmed,10);
           latmed = latmed + GPS.latitudeDegrees;
           Serial.println(latmed,10);
         }
         
-        if(times == 7){                                                                            //Dann wird ein Durchschnitt errechnet
+        if(times == 10){                                                                            //Dann wird ein Durchschnitt errechnet
           lonmed = lonmed / 5;
           latmed = latmed / 5;
           Serial.print("Average over 5 longitude: ");Serial.println(lonmed,10);
           Serial.print("Average over 5 latitude : ");Serial.println(latmed,10);
         }
   
-        if(times>8){                                                                      //Jetzt wird die Varianz von diesem Durchschnitt kontinuierlich gecheckt. 
+        if(times>11){                                                                      //Jetzt wird die Varianz von diesem Durchschnitt kontinuierlich gecheckt. 
           timer_speed = 5000;
           lonvariance =  lonmed - GPS.longitudeDegrees;
           latvariance = latmed - GPS.latitudeDegrees;
@@ -185,11 +183,24 @@ void check_GPS(int mode)
           Serial.print("lonvariance: ");Serial.println(lonvariance,10);
           Serial.print("latvariance: ");Serial.println(latvariance,10); 
         }
-        if(times>38){ 
+        if(times>11){ 
+          //digitalWrite(rasp_an,HIGH); //Raspberry anschalten TEST
           if(movcount >2){
-            digitalWrite(rasp_an,HIGH); //Raspberry anschalten
+            digitalWrite(rasp_an,HIGH); //Raspberry anschalten wenn es sich bewegt
         }
         
+        }
+        if(times>100 && movcount == 0){
+          digitalWrite(gps_an,LOW);
+          digitalWrite(rasp_an,LOW);
+          Serial.println("SCHLAF");
+          delay(500);
+          sleepNow();
+          lonmed = 0;
+          latmed = 0;
+          times = 1;
+          digitalWrite(gps_an,HIGH);
+          return;
         }
       }
 
@@ -203,18 +214,40 @@ void check_GPS(int mode)
       setTime(curhr,curmin,cursec,curday,curmonth,curyear);
       t = now();
       String timenow = String(t);
-      Serial.println(timenow);
-      String serdata = "{'command':'sendbroadcast','acc_id':'1','device_id': '100001', 'timestamp':'" + timenow + "','lock_mode':'"+schalter_status+"','latitude':'"+ latitude + "','longitude':'" + longitude +"','altitude':'"+String(GPS.altitude)+"','speed':'"+String(GPS.speed)+"','fix':'"+String(GPS.fix)+"','fix_quality':'"+String(GPS.fixquality)+"'}";
-      piS.print(serdata);
-      Serial.print("Data : ");Serial.println(serdata);
+      batteriestand();
       
+      String serdata1 = "{'command':'sendbroadcast','acc_id':'1','device_id': '100001', 'timestamp':'" + timenow + "','lock_mode':'"+schalter_status+"','latitude':'"+ latitude + "','longitude':'" + longitude +"','altitude':'"+String(GPS.altitude)+"','speed':'"+String(GPS.speed)+"','fix':'"+String(GPS.fix)+"','fix_quality':'"+String(GPS.fixquality);
+      String serdata2 = "','charge_level':'"+ batper + "'}";
+      Serial.print("Data : ");Serial.print(serdata1);Serial.println(serdata2);
+      piS.print(serdata1);piS.println(serdata2);
+      longitude = "";
+      latitude = "";
     }else{
-      Serial.println("NoFix");
-      Serial.println(times);
-      //char csvdata = "100002 , " +GPS.hour + GPS.minute + GPS.seconds + ","+ GPS.day + ","+GPS.month + ","+GPS.year+","+GPS.fix+ ","+GPS.fixquality+ ",0,0,0,0,0,0";
-    }
+      Serial.println("NoFix");  
+      times = 0;
+      lonmed = 0;
+      latmed = 0;
+      }
     }
 }
+void batteriestand()
+{
+  batval = analogRead(analogPin);  
+  Serial.println(batval);  
+  prowert = batval - 590;
+  prowert = prowert / 2.64; 
+  Serial.println(prowert);                                                                                 
+  if(prowert <= 0){                                                                
+    prowert = 0;
+  }
+  if(prowert >= 98){                                                             
+    prowert = 100;
+  }  
+  int batperint = (int)prowert;
+  
+  batper = String(batperint);   
+  Serial.println(batper);              
+} 
 
 void sleepNow()       
 {
@@ -226,17 +259,24 @@ void wakeUp()
 {
 
 }
+
 void loop(){
   // Allow wake up pin to trigger interrupt on high.
   attachInterrupt(digitalPinToInterrupt(wakeUpPin), wakeUp, CHANGE);
-  val = digitalRead(sleeper);
-  if(val == HIGH){
-    digitalWrite(gps_an,LOW);  
+  sleepval = digitalRead(sleeper);
+  if(sleepval == LOW){
+    piS.println("shutdown");
+    delay(10000);
+    digitalWrite(gps_an,LOW);
+    digitalWrite(rasp_an,LOW);
+    Serial.println("SCHLAF");
+    delay(500);
     sleepNow();
-    times = 1; 
-    digitalWrite(gps_an,HIGH);    
+    lonmed = 0;
+    latmed = 0;
+    times = 1;
+    digitalWrite(gps_an,HIGH);
   } 
-  
   if(digitalRead(schalter) == HIGH){
 
     schalter_status = 0; // zugeschlossen
@@ -249,5 +289,7 @@ void loop(){
   if(times != sectimes){ //Wird ein neuer Datensatz erhalten?
     Serial.println(times);
     sectimes = times;
+  }
+  
 }
-}
+
